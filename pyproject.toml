@@ -27,11 +27,18 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["simulation*"]
+include = ["afkn*"]
+
+[tool.setuptools.package-data]
+"afkn.configs" = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-q --tb=short"
+markers = [
+    "slow: builds the full-size (spec) dataset; still run by default and in CI",
+]
