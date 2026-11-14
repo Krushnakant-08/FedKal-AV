@@ -1,57 +1,96 @@
-# FedKal-AV: Federated KalmanNet for Autonomous Vehicle Navigation
+# FedKal-AV: Confidence-Aware Federated KalmanNet for AV Localization
 
 [![CI](https://github.com/Krushnakant-08/FedKal-AV/actions/workflows/ci.yml/badge.svg)](https://github.com/Krushnakant-08/FedKal-AV/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-FedKal-AV is a federated learning framework for neural Kalman filtering (KalmanNet) tailored for autonomous vehicle state estimation under non-IID sensor noise, intermittent GNSS denial, and sensor faults.
+Honors-with-Research project (A.Y. 2026-27). A simulation study of federated, neural-aided Kalman
+filtering for vehicle localization under non-IID sensor noise, GNSS outages and faulty or malicious
+clients, with an identity layer (Ed25519) and a server-verified confidence layer.
 
-## Features
+> **Status: work in progress. No experiments have been run and there are no results yet.**
+> All default thresholds and noise levels are starting values to tune, not findings.
+> This is a simulation study; it makes no formal privacy or security claims.
 
-- **High-Fidelity Vehicle Simulation**: Constant Turn Rate and Velocity (CTRV) and kinematic bicycle motion models with configurable process noise.
-- **Realistic Sensor Modeling**:
-  - **GNSS**: Position measurements with additive Gaussian noise, calibration bias, random dropout, and scheduled outage windows (e.g., tunnels).
-  - **IMU**: Yaw-rate and longitudinal acceleration with constant bias, random-walk bias drift, scale error, and high-frequency noise.
-- **Heterogeneous Non-IID Fleet**: 5 canonical client profiles (high-grade, mid-grade, low-grade, intermittent GNSS-denied, faulty) capturing realistic autonomous vehicle fleet diversity.
-- **Rigorous Dataset Partitioning**: Per-client train/val/test splits along with shared global test and server-trusted verification sets.
-- **Federated KalmanNet Architecture**: Robust state estimation combining physics-based kinematic prediction with deep learning-based Kalman gain adaptation.
+## Build status
 
-## Installation
+| Step | Component | Package | Status |
+| :-- | :-- | :-- | :-- |
+| 1 | Motion model, GNSS/IMU noise, 5 client profiles, trusted set | `afkn/sim`, `afkn/data` | **in PR** (`step-1-sim`) |
+| 2 | EKF and UKF baselines | `afkn/filters` | not started |
+| 3 | KalmanNet-style GRU gain network | `afkn/models` | not started |
+| 4 | Client, server, FedAvg loop, byte-level messages | `afkn/fed` | not started |
+| 5 | Ed25519 signing and the identity checks | `afkn/security` | not started |
+| 6 | Layer 2 scores and confidence aggregator | `afkn/confidence` | not started |
+| 7 | Attacks | `afkn/attacks` | not started |
+| 8 | Experiments E1-E8, statistics, fairness audit | `afkn/eval` | not started |
 
-Ensure Python 3.11 or later is installed:
+## Setup
 
 ```bash
 git clone https://github.com/Krushnakant-08/FedKal-AV.git
 cd FedKal-AV
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 ```
 
-## Running Tests
+Python 3.11+. CPU is sufficient. (Step 1 itself needs only NumPy, SciPy and PyYAML; PyTorch is
+used from Step 3 on.)
 
-Run the test suite with pytest:
+## Run the tests
 
 ```bash
-pytest tests/ -v --tb=short
+pytest -q
 ```
 
-## Architecture Overview
+## Inspect the generated dataset
+
+Builds the full dataset in memory (about 4 s, about 0.35 GB RAM) and prints realised statistics.
+Writes nothing to disk.
+
+```bash
+python -m afkn.scripts.inspect_dataset              # default config, cfg.seed
+python -m afkn.scripts.inspect_dataset --seed 7 --json
+```
+
+## Step 1 contract (what later steps rely on)
+
+State `x = [px, py, heading, speed]`, input `u = [yaw_rate, accel]`, `dt = 0.1 s`, 1000 steps.
+
+```
+x[t]  true state,  t = 0..T      (N, T+1, 4)    heading is NOT wrapped; use motion.wrap_angle on differences
+u[t]  drives x[t] -> x[t+1]      (N, T, 2)      u_true (ground truth) and u_imu (what filters may use)
+z[t]  GNSS measurement OF x[t+1] (N, T, 2)      NaN exactly where z_mask is False
+```
+
+* `afkn.seeding.SeedTree`: every random stream is a pure function of `(seed, named path)`.
+  Same seed gives bit-identical data (`TrajectoryBatch.content_hash()`).
+* `afkn.sim.config`: frozen, validated dataclasses loaded from YAML (`afkn/configs/default.yaml`).
+  Ablations are config overrides, e.g. `load_config(overrides={"motion_model": "bicycle"})`.
+* `afkn.sim.motion`: `f`, `jac_x`, `jac_u`, `h`, `H` shared by the simulator, the filters and
+  KalmanNet. Models: `ctrv` (exact arc) and `bicycle` (midpoint-heading Euler).
+* `afkn.sim.sensors`: `DeviceParams` (the *realised* per-client sensor constants; `R()` gives the
+  honest GNSS covariance), `apply_imu`, `apply_gnss`.
+* `afkn.data.build_federated_dataset(cfg, seed)` returns per-client train/val/test, a shared
+  global test set and a server trusted set. Both mixed sets cover all five profiles and are
+  disjoint from every client.
+* `cfg.Q()` and `cfg.P0()` give the process-noise and initial covariances used by the simulator.
+
+## Layout
 
 ```text
-FedKal-AV/
-├── simulation/            # Vehicle dynamics, sensors, trajectory & dataset generation
-│   ├── config.py          # Dataclasses for motion, sensors, clients, and datasets
-│   ├── motion.py          # CTRV and Kinematic Bicycle motion propagators
-│   ├── trajectory.py      # Multi-segment trajectory generator (urban, highway, tunnel)
-│   └── dataset.py         # Federated non-IID dataset builder
-├── tests/                 # Unit and integration test suite
-│   └── test_simulation.py # Comprehensive verification of simulation and models
-├── .github/workflows/ci.yml # Continuous Integration workflow
-├── pyproject.toml         # Build system and package configuration
-├── requirements.txt       # Project dependencies
-└── STATE.md               # Project development roadmap and progress tracker
+afkn/
+  seeding.py        SeedTree (SeedSequence-based, order-independent)
+  sim/              config, motion, sensors, generator, batch (TrajectoryBatch)
+  data/             federated partition
+  configs/          default.yaml
+  scripts/          inspect_dataset.py   (make_all.py arrives in Step 8)
+tests/              one test module per component; pytest -q runs everything
+STATE.md            development log
+THIRD_PARTY.md      dependency licenses
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT, see [LICENSE](LICENSE).
