@@ -44,9 +44,9 @@ htmlcov/
 *.pth
 checkpoints/
 
-# Data and artifacts
-data/
-runs/
+# Data and artifacts (anchored to the repo root so the afkn/data/ package is NOT ignored)
+/data/
+/runs/
 
 # Weights & Biases
 wandb/
