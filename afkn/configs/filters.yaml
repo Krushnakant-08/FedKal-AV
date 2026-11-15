@@ -1,0 +1,13 @@
+# Filter settings. STARTING DEFAULTS to tune; none tuned against any result.
+# (Q, R, Qu and P0 are NOT set here: they are derived from the simulation config so
+# that the "matched" filter is correct by construction. See afkn/filters/params.py.)
+
+ukf:
+  alpha: 1.0     # sigma-point spread (alpha=1, kappa=0 puts zero weight on the centre point)
+  beta: 2.0
+  kappa: 0.0
+
+eskf:            # SIMPLIFIED error-state KF (see afkn/filters/eskf.py for exactly what is simplified)
+  estimate_bias: true          # false -> reduces exactly to the EKF
+  bias_init_std: [0.02, 0.2]   # filter-side prior std of IMU bias [yaw rate rad/s, accel m/s^2]
+  bias_rw_std: [0.001, 0.01]   # filter-side bias random-walk std per sqrt(s)
