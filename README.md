@@ -16,8 +16,8 @@ clients, with an identity layer (Ed25519) and a server-verified confidence layer
 
 | Step | Component | Package | Status |
 | :-- | :-- | :-- | :-- |
-| 1 | Motion model, GNSS/IMU noise, 5 client profiles, trusted set | `afkn/sim`, `afkn/data` | **in PR** (`step-1-sim`) |
-| 2 | EKF and UKF baselines | `afkn/filters` | not started |
+| 1 | Motion model, GNSS/IMU noise, 5 client profiles, trusted set | `afkn/sim`, `afkn/data` | merged |
+| 2 | EKF and UKF baselines (+ simplified ESKF) | `afkn/filters` | **in PR** (`step-2-filters`) |
 | 3 | KalmanNet-style GRU gain network | `afkn/models` | not started |
 | 4 | Client, server, FedAvg loop, byte-level messages | `afkn/fed` | not started |
 | 5 | Ed25519 signing and the identity checks | `afkn/security` | not started |
@@ -84,7 +84,8 @@ afkn/
   seeding.py        SeedTree (SeedSequence-based, order-independent)
   sim/              config, motion, sensors, generator, batch (TrajectoryBatch)
   data/             federated partition
-  configs/          default.yaml
+  filters/          EKF, UKF, simplified ESKF, NEES/NIS metrics (Step 2)
+  configs/          default.yaml (simulation), filters.yaml (filters)
   scripts/          inspect_dataset.py   (make_all.py arrives in Step 8)
 tests/              one test module per component; pytest -q runs everything
 STATE.md            development log

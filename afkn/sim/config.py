@@ -334,6 +334,11 @@ def _build(cls: type, raw: dict[str, Any], where: str) -> Any:
         raise ConfigError(f"{where}: {exc}") from exc
 
 
+def build_dataclass(cls: type, raw: dict[str, Any], where: str = "config") -> Any:
+    """Public strict builder (unknown keys rejected, types coerced) for any dataclass in this style."""
+    return _build(cls, raw, where)
+
+
 def deep_merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge ``over`` into a copy of ``base`` (lists/scalars are replaced)."""
     out = copy.deepcopy(base)
