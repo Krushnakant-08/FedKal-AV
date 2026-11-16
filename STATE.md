@@ -9,8 +9,8 @@ Nothing has been run experimentally. All thresholds and noise levels are untuned
 | :-- | :-- | :-- | :-- |
 | 0 | Project skeleton and CI | repo root | merged |
 | 1 | Motion model, GNSS/IMU noise, 5 client profiles, trusted set | `afkn/sim`, `afkn/data` | **merged** (PR #1) |
-| 2 | EKF and UKF baselines | `afkn/filters` | next |
-| 3 | KalmanNet-style GRU gain network | `afkn/models` | not started |
+| 2 | EKF and UKF baselines (+ simplified ESKF) | `afkn/filters` | **merged** (PR #3) |
+| 3 | KalmanNet-style GRU gain network | `afkn/models` | next (blocked: PyTorch not installable in the build environment) |
 | 4 | Client, server, FedAvg loop, byte-level messages | `afkn/fed` | not started |
 | 5 | Ed25519 signing and the identity checks | `afkn/security` | not started |
 | 6 | Layer 2 scores and confidence aggregator | `afkn/confidence` | not started |
@@ -34,10 +34,29 @@ and a different step table. That code never existed on `main`; Step 1 was built 
 Time convention: `u[t]` drives `x[t] -> x[t+1]`; `z[t]` measures `x[t+1]`; heading is not wrapped.
 Filters may use only `u_imu`, `z`, `z_mask`, `x0_est`.
 
+## Step 2: files and interfaces
+
+- `afkn/filters/params.py`: `FilterParams(Q, R, Qu, P0, model, dt)`; `matched_params(cfg, device)`, `matched_params_by_profile(cfg, profile_idx)` (per-trajectory R/Qu for mixed sets), `.scaled(q, r, qu)` for deliberate mismatch. `Qu` = IMU white-noise covariance; effective process covariance is `Q + G Qu G^T`.
+- `afkn/filters/{ekf,ukf,eskf}.py`: `EKF(params)`, `UKF(params, spec)`, `ESKF(params, spec)`, each `.run(batch, P0=None) -> FilterResult`. ESKF is a SIMPLIFIED planar error-state filter with 2 IMU bias states; with `estimate_bias=False` it equals the EKF.
+- `afkn/filters/base.py`: `FilterResult` (`x_hat`/`P` aligned with `batch.x` incl. index 0 = `x0_est`; `x_pred`, `P_pred`, `innov`, `S`, `updated`, `nis`, `bias_hat`).
+- `afkn/filters/consistency.py`: `nees`, `anees_bounds`, `consistency_summary`, `position_rmse`, `state_error`.
+- `afkn/filters/config.py`, `afkn/configs/filters.yaml`: UKF/ESKF settings (`load_filter_config`).
+- `afkn/sim/config.py`: added public `build_dataclass`.
+
+Results on the Step 2 test data (matched Q/R, no IMU bias/RW/scale, 200 x 400): EKF ANEES 4.033, NIS 2.007; UKF 4.035 / 2.007 (95% ANEES bounds 3.62-4.40). Exploratory, not experiment results.
+
+## Findings that constrain later steps
+
+- Mismatched Q or R (x0.01 / x100) changes EKF position RMSE by only 2-4% (6.55 m -> 6.68-6.81 m); the damage shows in NEES/NIS. Step 3's "KalmanNet beats the EKF under Q/R mismatch" test needs a regime where mismatch matters (more GNSS-denied time, unmodelled IMU bias, or much stronger mismatch).
+- `ctrv` vs `bicycle` differ by at most 3 mm over the whole dataset at dt = 0.1 s; the flag will not drive experimental differences.
+- EKF/UKF do not model IMU bias, random walk or scale error (only IMU white noise); matched-noise consistency holds only when those are zero.
+- Simplified ESKF with bias states: lower RMSE (about 10-17%) under a large constant IMU bias, about 12% higher RMSE with no bias (single exploratory scenarios).
+
 ## Open issues / notes for later steps
 
-- `requirements.txt` is not pinned (project rule asks for pinned); pin once versions are verified on Python 3.11, before Step 3.
-- Process noise Q is additive on the state and excludes IMU error: the Step 2 NEES test must use an ideal IMU or an effective Q built from `jac_u`.
+- `requirements.txt` is not pinned (project rule asks for pinned); pin once versions are verified on Python 3.11 (needs torch, see below).
+- Process noise Q is additive on the state and excludes IMU error; filters model IMU white noise via `Qu` only.
 - `faulty` clients are honest-but-faulty sensors, not attackers; the trusted/global-test `faulty` slice uses the profile default fault mode (`constant_bias`).
 - Full default dataset is about 0.35 GB of float64 in memory.
-- Tests ran locally on Python 3.13; CI uses 3.11.
+- Tests run locally on Python 3.13; CI runs 3.11 and passed on `main` after Steps 1 and 2.
+- PyTorch is not installed in the build sandbox and package installs are disabled there, so any torch code cannot be run locally; it can only be run by CI or after the network/package-install setting is enabled (a new chat picks it up).
