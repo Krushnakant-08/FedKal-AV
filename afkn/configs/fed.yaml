@@ -1,0 +1,7 @@
+# Federated-loop settings. STARTING DEFAULTS to tune; none tuned against any result.
+rounds: 100
+local_epochs: 2
+participation: 0.6     # fraction of clients sampled per round
+server_lr: 1.0         # global += server_lr * sum_i alpha_i * delta_i
+eval_every: 1          # evaluate on the global test set every k rounds (last round always)
+weight_floor: 0.0      # FedAvg has no floor; Step 6 sets 0.01 for the confidence aggregator
