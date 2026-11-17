@@ -104,3 +104,6 @@ MIT, see [LICENSE](LICENSE).
 
 ## Step 5 (identity)
 `afkn/security/`: Ed25519 signing, enrollment registry, Layer 1 checks (`IdentityVerifier`). Keys are generated at runtime, never stored.
+
+## Step 6 (confidence)
+`afkn/confidence/`: Layer 2 scores, history, probation and the confidence aggregator (`ConfidenceAggregator`, passed as `weighter=` to `run_federated`).
