@@ -94,3 +94,20 @@ def test_identity_checks_in_the_loop_reject_revoked_client_and_log_reason(datase
     assert rows[3]["accepted"] is False and rows[3]["reject_reason"] == "revoked" and rows[3]["weight"] == 0.0
     assert all(r["accepted"] for c, r in rows.items() if c != 3)
     assert np.isclose(sum(r["weight"] for r in rows.values()), 1.0)
+
+
+def test_confidence_aggregator_in_the_loop_logs_layer2_and_keeps_floor(dataset) -> None:
+    from afkn.confidence import ConfidenceAggregator, ConfidenceSpec
+    from afkn.confidence.oracle_torch import TorchOracle
+
+    spec = ConfidenceSpec(ref_epochs=1)
+    cfg = dataset.cfg
+    oracle = TorchOracle(KCFG, dataset.trusted, motion_model=cfg.motion_model, dt=cfg.dt, ref_epochs=1, seed=0)
+    agg = ConfidenceAggregator(spec, oracle)
+    run = run_federated(dataset, KCFG, FedSpec(rounds=2, local_epochs=1, participation=0.6), seed=0, weighter=agg)
+    for rl in run.rounds:
+        acc = [r for r in rl.clients if r["accepted"]]
+        assert np.isclose(sum(r["weight"] for r in acc), 1.0)
+        assert all(r["weight"] >= spec.weight_floor - 1e-12 for r in acc)
+        assert all({"s_dir", "s_perf", "ema", "liar", "score", "probation"} <= set(r["layer2"]) for r in acc)
+    assert np.isfinite(run.params).all()
