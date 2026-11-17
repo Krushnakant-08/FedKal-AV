@@ -95,3 +95,6 @@ THIRD_PARTY.md      dependency licenses
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## Step 3 (KalmanNet)
+`afkn/models/`: GRU-gain KalmanNet, trainer, flat-param API. Torch tests run only where PyTorch is installed (always in CI).
