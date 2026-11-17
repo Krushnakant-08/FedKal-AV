@@ -179,3 +179,14 @@ def test_beats_mismatched_ekf() -> None:
     train(net, train_b, kcfg.train, seed=0)
     kn = evaluate(net, test_b)["position_rmse"]
     assert kn < mismatched, f"KalmanNet {kn:.3f} m vs mismatched EKF {mismatched:.3f} m (matched EKF {matched:.3f} m)"
+
+
+def test_nonfinite_loss_batch_is_skipped_and_weights_stay_finite() -> None:
+    _, _, batch = _data(n=2, steps=50)
+    bad = dataclasses.replace(batch, z=np.where(batch.z_mask[..., None], 1e30, np.nan))
+    net = KalmanNet(seed=0)
+    before = net.get_flat_params()
+    log = train(net, bad, load_kalmannet_config().train, seed=0)
+    assert log.skipped_batches > 0
+    assert np.isfinite(net.get_flat_params()).all()
+    np.testing.assert_array_equal(net.get_flat_params(), before)  # never stepped on a non-finite loss

@@ -26,6 +26,7 @@ class TrainLog:
     losses: list[float] = field(default_factory=list)
     grad_norms: list[float] = field(default_factory=list)
     epoch_losses: list[float] = field(default_factory=list)
+    skipped_batches: int = 0  # batches abandoned because the loss became non-finite (weights untouched)
 
 
 def mse_state_loss(x_hat: torch.Tensor, x_true: torch.Tensor, weights: tuple[float, float, float, float]) -> torch.Tensor:
@@ -74,6 +75,9 @@ def train(
                 c1 = min(c0 + cfg.chunk_len, steps)
                 x_hat, state = model(u[:, c0:c1], z[:, c0:c1], avail[:, c0:c1], state=state)
                 loss = mse_state_loss(x_hat, x_true[:, c0 + 1 : c1 + 1], cfg.loss_weights)
+                if not torch.isfinite(loss):  # diverged: never step on it; abandon this batch, keep weights finite
+                    log.skipped_batches += 1
+                    break
                 opt.zero_grad(set_to_none=True)
                 loss.backward()
                 gnorm = torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
