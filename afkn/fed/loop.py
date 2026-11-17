@@ -21,6 +21,8 @@ from afkn.fed.server import Server
 from afkn.models.config import KalmanNetConfig
 from afkn.models.kalmannet import KalmanNet
 from afkn.models.train import evaluate, train
+from afkn.security.identities import Identities
+from afkn.security.verifier import IdentityVerifier
 from afkn.seeding import SeedTree
 from afkn.sim.batch import TrajectoryBatch
 
@@ -73,11 +75,14 @@ def run_federated(
     seed: int,
     weighter: Weighter | None = None,
     init_params: np.ndarray | None = None,
+    identities: Identities | None = None,
 ) -> RunLog:
     """FedAvg (weights ``n_i``) unless a ``weighter`` is given. Step 6 plugs the confidence scores in here."""
     tree = SeedTree(seed)
     cfg = dataset.cfg
-    server = Server(_init_params(dataset, kcfg, tree) if init_params is None else init_params, fed, tree.child("server"))
+    verifier = IdentityVerifier(identities.registry) if identities is not None else None
+    server = Server(_init_params(dataset, kcfg, tree) if init_params is None else init_params, fed,
+                    tree.child("server"), verifier)
     clients = [Client(c, kcfg, motion_model=cfg.motion_model, dt=cfg.dt) for c in dataset.clients]
     eval_net = KalmanNet(kcfg, model=cfg.motion_model, dt=cfg.dt, seed=0)
     log = RunLog(mode="fedavg")
@@ -91,10 +96,12 @@ def run_federated(
         for cid in ids:
             seed_c = tree.child("client", int(cid), "round", r).int_seed()
             upd = clients[int(cid)].local_update(bc, fed.local_epochs, seed_c)
+            if identities is not None:
+                upd = identities.sign(upd)
             raw_bytes = upd.to_bytes()
             wire_up += len(raw_bytes)
             upd = ClientUpdate.from_bytes(raw_bytes)
-            reason = server.basic_checks(upd, bc)
+            reason = server.check_update(upd, bc)
             rows.append({
                 "client": int(cid), "accepted": reason is None, "reject_reason": reason,
                 "n_samples": upd.n_samples, "delta_norm": float(np.linalg.norm(upd.delta.astype(np.float64))),

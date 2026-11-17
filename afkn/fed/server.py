@@ -9,19 +9,33 @@ from afkn.fed.config import FedSpec
 from afkn.fed.messages import NONCE_LEN, ClientUpdate, GlobalBroadcast
 from afkn.seeding import SeedTree
 
+# afkn.security imports afkn.fed.messages only, so there is no import cycle.
+from afkn.security.verifier import IdentityVerifier
+
 
 class Server:
     """Holds the global parameters. The nonce is derived from the seed (simulation determinism);
     a deployment would draw it from a CSPRNG."""
 
-    def __init__(self, init_params: np.ndarray, fed: FedSpec, tree: SeedTree) -> None:
+    def __init__(self, init_params: np.ndarray, fed: FedSpec, tree: SeedTree,
+                 verifier: IdentityVerifier | None = None) -> None:
         self.params = np.asarray(init_params, dtype=np.float32).copy()
         self.fed = fed
         self.tree = tree
+        self.verifier = verifier  # Layer 1 (Ed25519 identity checks); None = structural checks only
 
     def broadcast(self, round_idx: int) -> GlobalBroadcast:
         nonce = self.tree.child("nonce", round_idx).rng().bytes(NONCE_LEN)
-        return GlobalBroadcast(round=round_idx, nonce=nonce, params=self.params.copy())
+        bc = GlobalBroadcast(round=round_idx, nonce=nonce, params=self.params.copy())
+        if self.verifier is not None:
+            self.verifier.begin_round(bc)
+        return bc
+
+    def check_update(self, upd: ClientUpdate, bc: GlobalBroadcast) -> str | None:
+        """Reject reason or None. Uses the Layer 1 verifier when configured, else ``basic_checks``."""
+        if self.verifier is None:
+            return self.basic_checks(upd, bc)
+        return self.verifier.check(upd).reason
 
     def basic_checks(self, upd: ClientUpdate, bc: GlobalBroadcast) -> str | None:
         """Structural sanity only (reason string, or None if fine). The cryptographic identity checks
