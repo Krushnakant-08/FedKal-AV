@@ -18,7 +18,7 @@ from afkn.fed.loop import run_comparison, run_federated
 from afkn.models import load_kalmannet_config
 
 KCFG = load_kalmannet_config(
-    overrides={"net": {"init_pos_gain": 0.3}, "train": {"lr": 5e-3, "batch_size": 6, "chunk_len": 50}}
+    overrides={"net": {"init_pos_gain": 0.3}, "train": {"batch_size": 6, "chunk_len": 50}}
 )
 FED = FedSpec(rounds=6, local_epochs=2, participation=0.6, eval_every=3)
 
@@ -73,6 +73,7 @@ def test_federated_beats_local_only_and_gap_is_logged(dataset) -> None:
     """Done when: federated model beats local-only (global test); gap to centralized is logged."""
     out = run_comparison(dataset, KCFG, FED, seed=0)
     s = out["summary"]
+    assert all(np.isfinite(s[k]) for k in ("fedavg_rmse", "local_only_mean_rmse", "centralized_rmse")), s
     assert np.isfinite(s["gap_fedavg_minus_centralized"])
     assert np.isclose(s["gap_fedavg_minus_centralized"], s["fedavg_rmse"] - s["centralized_rmse"])
     assert s["fedavg_beats_local_only"], (
