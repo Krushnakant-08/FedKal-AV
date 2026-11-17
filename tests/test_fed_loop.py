@@ -80,3 +80,17 @@ def test_federated_beats_local_only_and_gap_is_logged(dataset) -> None:
         f"fedavg {s['fedavg_rmse']:.3f} m vs local-only mean {s['local_only_mean_rmse']:.3f} m "
         f"(centralized {s['centralized_rmse']:.3f} m)"
     )
+
+
+def test_identity_checks_in_the_loop_reject_revoked_client_and_log_reason(dataset) -> None:
+    from afkn.security import Identities
+    from afkn.seeding import SeedTree
+
+    ids = Identities(len(dataset.clients), SeedTree(1))
+    ids.registry.revoke(3)
+    f = FedSpec(rounds=1, local_epochs=1, participation=1.0)
+    run = run_federated(dataset, KCFG, f, seed=0, identities=ids)
+    rows = {r["client"]: r for r in run.rounds[0].clients}
+    assert rows[3]["accepted"] is False and rows[3]["reject_reason"] == "revoked" and rows[3]["weight"] == 0.0
+    assert all(r["accepted"] for c, r in rows.items() if c != 3)
+    assert np.isclose(sum(r["weight"] for r in rows.values()), 1.0)

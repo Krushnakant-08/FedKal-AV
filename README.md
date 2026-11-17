@@ -101,3 +101,6 @@ MIT, see [LICENSE](LICENSE).
 
 ## Step 4 (federated loop)
 `afkn/fed/`: byte-level messages, aggregation, client, server, FedAvg loop, local-only and centralized baselines (`run_comparison`).
+
+## Step 5 (identity)
+`afkn/security/`: Ed25519 signing, enrollment registry, Layer 1 checks (`IdentityVerifier`). Keys are generated at runtime, never stored.
