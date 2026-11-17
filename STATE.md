@@ -10,8 +10,8 @@ Nothing has been run experimentally. All thresholds and noise levels are untuned
 | 0 | Project skeleton and CI | repo root | merged |
 | 1 | Motion model, GNSS/IMU noise, 5 client profiles, trusted set | `afkn/sim`, `afkn/data` | **merged** (PR #1) |
 | 2 | EKF and UKF baselines (+ simplified ESKF) | `afkn/filters` | **merged** (PR #3) |
-| 3 | KalmanNet-style GRU gain network | `afkn/models` | next (blocked: PyTorch not installable in the build environment) |
-| 4 | Client, server, FedAvg loop, byte-level messages | `afkn/fed` | not started |
+| 3 | KalmanNet-style GRU gain network | `afkn/models` | **merged** (PR #5; torch code written without a local torch, first run in CI) |
+| 4 | Client, server, FedAvg loop, byte-level messages | `afkn/fed` | **merged** (PR #6) |
 | 5 | Ed25519 signing and the identity checks | `afkn/security` | not started |
 | 6 | Layer 2 scores and confidence aggregator | `afkn/confidence` | not started |
 | 7 | Attacks | `afkn/attacks` | not started |
@@ -45,7 +45,23 @@ Filters may use only `u_imu`, `z`, `z_mask`, `x0_est`.
 
 Results on the Step 2 test data (matched Q/R, no IMU bias/RW/scale, 200 x 400): EKF ANEES 4.033, NIS 2.007; UKF 4.035 / 2.007 (95% ANEES bounds 3.62-4.40). Exploratory, not experiment results.
 
+## Step 3: files and interfaces
+
+- `afkn/models/config.py` (torch-free): `KalmanNetSpec`, `TrainSpec`, `KalmanNetConfig`, `expected_num_params`, `load_kalmannet_config`; `configs/kalmannet.yaml`.
+- `afkn/models/motion_torch.py`: `f_torch`, `h_torch`, `wrap_angle_torch` (parity-tested against `sim.motion`).
+- `afkn/models/kalmannet.py`: `KalmanNet(config, model, dt, seed)`; `.run(batch) -> KalmanNetResult` (duck-typed like `FilterResult` for `position_rmse`); `.get_flat_params()/.set_flat_params()` (float32, validated); 30,664 params. Gain is tanh-bounded: |K_ij| < gain_scale_i (added after CI showed divergence with an unbounded gain).
+- `afkn/models/train.py`: `train(model, batch, train_cfg, seed) -> TrainLog` (Adam, clip, truncated BPTT; batches with a non-finite loss are skipped and counted in `skipped_batches`), `evaluate`.
+
+## Step 4: files and interfaces
+
+- `afkn/fed/messages.py`: `GlobalBroadcast`, `ClientUpdate` (strict byte encodings; `signing_payload()`, `with_signature()`, `delta_hash`, `payload_bytes`, `wire_bytes`), `MessageError`.
+- `afkn/fed/aggregate.py`: `fedavg_weights`, `normalize_weights(raw, floor)` (floor holds exactly), `sample_participants`, `apply_deltas`.
+- `afkn/fed/{client,server,loop}.py`: `Client.local_update`, `Server.broadcast/basic_checks/final_weights/aggregate` (`basic_checks` is the hook Step 5 replaces), `run_federated(..., weighter=)` (hook for Step 6), `run_local_only`, `run_centralized`, `run_comparison`.
+- Config: `configs/fed.yaml` (`FedSpec`).
+
 ## Findings that constrain later steps
+
+- CI exposed that an unbounded KalmanNet gain can destabilise the filter recursion (local-only RMSE ~3e6 m, centralized NaN); fixed with a tanh bound. Federated-vs-local results are still unmeasured beyond the CI test.
 
 - Mismatched Q or R (x0.01 / x100) changes EKF position RMSE by only 2-4% (6.55 m -> 6.68-6.81 m); the damage shows in NEES/NIS. Step 3's "KalmanNet beats the EKF under Q/R mismatch" test needs a regime where mismatch matters (more GNSS-denied time, unmodelled IMU bias, or much stronger mismatch).
 - `ctrv` vs `bicycle` differ by at most 3 mm over the whole dataset at dt = 0.1 s; the flag will not drive experimental differences.
