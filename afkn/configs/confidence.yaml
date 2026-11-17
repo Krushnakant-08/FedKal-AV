@@ -1,0 +1,19 @@
+# Layer 2 (confidence) settings. STARTING DEFAULTS to tune; none tuned against any result.
+clip_c: 2.0              # clip each delta norm to clip_c x the round's median norm
+perf_scale: 0.05         # s_perf = sigmoid(gain / perf_scale); gain = RMSE improvement on the trusted set [m]
+relative_gain: false     # true: gain / RMSE(global) instead of metres
+claim_reported_min: 0.05 # [m] reported val-RMSE improvement above this counts as "claims improvement"
+claim_measured_max: -0.05 # [m] server-measured gain below this counts as "measured degradation"
+liar_factor: 0.5         # score multiplier when the claim check flags a liar
+combine: product         # product | mean of (s_dir, s_perf)
+ema_alpha: 0.5           # weight of the newest score in the EMA
+low_score: 0.1           # per-round score below this counts toward probation
+low_rounds: 3            # consecutive low rounds that trigger probation
+probation_len: 5         # rounds in probation (the trigger round included)
+weight_floor: 0.01
+ref_epochs: 2            # trusted-set reference update = ref_epochs of the local trainer from the global model
+use_clip: true           # ablation switches (component off => neutral)
+use_direction: true
+use_perf: true
+use_claim: true
+use_history: true
