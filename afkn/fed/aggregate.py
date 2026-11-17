@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 import numpy as np
 
 
@@ -53,3 +55,26 @@ def apply_deltas(global_params: np.ndarray, deltas: np.ndarray, weights: np.ndar
     if (w < 0).any() or not np.isclose(w.sum(), 1.0, atol=1e-9):
         raise ValueError("weights must be non-negative and sum to 1")
     return (g.astype(np.float64) + server_lr * (w[:, None] * d).sum(axis=0)).astype(np.float32)
+
+
+@dataclass(frozen=True)
+class RoundContext:
+    """What a weighting policy may know about the current round (server side only)."""
+
+    round: int
+    global_params: np.ndarray  # (P,) float32, the model broadcast this round
+
+
+@dataclass(frozen=True)
+class Weighting:
+    """Result of a weighting policy for the accepted updates of one round.
+
+    ``raw``: non-negative scores (normalised by the loop with ``floor``); ``info``: per-client log rows
+    keyed by client id; ``deltas``: optional replacement deltas (e.g. norm-clipped), shape (k, P);
+    ``floor``: overrides ``FedSpec.weight_floor`` when not None.
+    """
+
+    raw: np.ndarray
+    info: dict[int, dict] = field(default_factory=dict)
+    deltas: np.ndarray | None = None
+    floor: float | None = None

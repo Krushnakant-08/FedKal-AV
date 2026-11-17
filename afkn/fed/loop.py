@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from afkn.data.partition import FederatedDataset
-from afkn.fed.aggregate import fedavg_weights, sample_participants
+from afkn.fed.aggregate import RoundContext, Weighting, fedavg_weights, normalize_weights, sample_participants
 from afkn.fed.client import Client
 from afkn.fed.config import FedSpec
 from afkn.fed.messages import ClientUpdate, GlobalBroadcast
@@ -26,8 +26,9 @@ from afkn.security.verifier import IdentityVerifier
 from afkn.seeding import SeedTree
 from afkn.sim.batch import TrajectoryBatch
 
-#: raw per-client scores (>= 0) for the accepted updates; default is FedAvg's ``n_samples``
-Weighter = Callable[[list[ClientUpdate]], np.ndarray]
+#: weighting policy for the accepted updates of a round (default None = FedAvg's ``n_samples``);
+#: may return raw scores or a ``Weighting`` (scores + per-client log rows + replacement deltas + floor)
+Weighter = Callable[[list[ClientUpdate], RoundContext], "Weighting | np.ndarray"]
 
 
 @dataclass
@@ -110,12 +111,25 @@ def run_federated(
             if reason is None:
                 accepted.append(upd)
         if accepted:
-            raw = np.asarray([u.n_samples for u in accepted], dtype=np.float64) if weighter is None else weighter(accepted)
-            w = server.final_weights(raw if weighter is not None else fedavg_weights(raw))
+            agg_updates = accepted
+            if weighter is None:
+                w = server.final_weights(fedavg_weights([u.n_samples for u in accepted]))
+                info: dict[int, dict] = {}
+            else:
+                wt = weighter(accepted, RoundContext(r, server.params.copy()))
+                if not isinstance(wt, Weighting):
+                    wt = Weighting(raw=np.asarray(wt, dtype=np.float64))
+                w = normalize_weights(wt.raw, server.fed.weight_floor if wt.floor is None else wt.floor)
+                info = wt.info
+                if wt.deltas is not None:
+                    agg_updates = [dataclasses.replace(u, delta=np.asarray(d, dtype=np.float32))
+                                   for u, d in zip(accepted, wt.deltas, strict=True)]
             by_id = {u.client_id: float(wi) for u, wi in zip(accepted, w, strict=True)}
             for row in rows:
                 row["weight"] = by_id.get(row["client"], 0.0)
-            server.aggregate(accepted, w)
+                if row["client"] in info:
+                    row["layer2"] = info[row["client"]]
+            server.aggregate(agg_updates, w)
         rmse = float("nan")
         if _should_eval(r, fed):
             eval_net.set_flat_params(server.params)

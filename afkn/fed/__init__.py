@@ -18,7 +18,7 @@ __all__ = [
     "FedSpec",
     "GlobalBroadcast",
     "MessageError",
-    "apply_deltas",
+    "RoundContext", "Weighting", "apply_deltas",
     "fedavg_weights",
     "hash_params",
     "load_fed_config",
