@@ -37,6 +37,8 @@ class KalmanNetSpec:
             raise ConfigError("hidden sizes must be >= 1")
         if self.innov_scale <= 0 or min(self.state_scale) <= 0 or min(self.gain_scale) <= 0:
             raise ConfigError("scales must be > 0")
+        if abs(self.init_pos_gain) >= min(self.gain_scale[0], self.gain_scale[1]):
+            raise ConfigError("|init_pos_gain| must be < the position gain scales (the gain is tanh-bounded)")
         if self.out_init_scale < 0:
             raise ConfigError("out_init_scale must be >= 0")
 
