@@ -98,3 +98,6 @@ MIT, see [LICENSE](LICENSE).
 
 ## Step 3 (KalmanNet)
 `afkn/models/`: GRU-gain KalmanNet, trainer, flat-param API. Torch tests run only where PyTorch is installed (always in CI).
+
+## Step 4 (federated loop)
+`afkn/fed/`: byte-level messages, aggregation, client, server, FedAvg loop, local-only and centralized baselines (`run_comparison`).
