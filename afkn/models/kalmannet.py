@@ -4,7 +4,7 @@ Per step ``t`` (``u[t]`` drives ``x[t] -> x[t+1]``; ``z[t]`` measures ``x[t+1]``
 
     x_pred = f(x_post, u_imu[t])                       known model (no learned dynamics)
     nu     = (z[t] - h(x_pred)) * available            innovation (0 when GNSS is missing)
-    K      = GainNet(features)                         4x2 gain from a GRU (hidden size 64)
+    K      = GainNet(features)                         4x2 gain from a GRU (hidden size 64), |K_ij| < gain_scale_i (tanh)
     x_post = x_pred + K @ nu                           update (x_post = x_pred when missing)
 
 There is no covariance recursion: the network replaces the ``P``/``S`` computation of the EKF.
@@ -123,8 +123,8 @@ class KalmanNet(nn.Module):
             fill(self.fc2.weight, spec.out_init_scale / math.sqrt(spec.fc_hidden))
             self.fc2.bias.zero_()
             if spec.init_pos_gain != 0.0:  # K[0,0] and K[1,1] in the row-major 4x2 layout
-                self.fc2.bias[0] = spec.init_pos_gain / spec.gain_scale[0]
-                self.fc2.bias[3] = spec.init_pos_gain / spec.gain_scale[1]
+                self.fc2.bias[0] = math.atanh(spec.init_pos_gain / spec.gain_scale[0])
+                self.fc2.bias[3] = math.atanh(spec.init_pos_gain / spec.gain_scale[1])
 
     @property
     def num_params(self) -> int:
@@ -179,7 +179,8 @@ class KalmanNet(nn.Module):
             dim=1,
         )
         hidden = self.gru(torch.relu(self.fc_in(feats)), state.hidden)
-        gain = self.fc2(torch.relu(self.fc1(hidden))).view(-1, 4, 2) * self.gain_scale[None, :, None]
+        # tanh bounds every gain entry to (-gain_scale, gain_scale): an unbounded gain makes the filter loop unstable
+        gain = torch.tanh(self.fc2(torch.relu(self.fc1(hidden)))).view(-1, 4, 2) * self.gain_scale[None, :, None]
         x_post = x_pred + torch.bmm(gain, innov.unsqueeze(-1)).squeeze(-1)  # innov == 0 when unavailable
         return StepOut(KNState(x_post, state.x_post, x_pred, hidden), x_pred, gain, innov)
 
