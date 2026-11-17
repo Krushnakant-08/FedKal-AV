@@ -1,0 +1,18 @@
+# KalmanNet settings. STARTING DEFAULTS to tune; none tuned against any result.
+net:
+  hidden: 64             # GRU hidden size
+  fc_hidden: 64
+  innov_scale: 3.0       # [m]
+  state_scale: [3.0, 3.0, 0.05, 0.25]   # [m, m, rad, m/s]
+  gain_scale: [1.0, 1.0, 0.05, 0.5]     # K rows: position gains O(1), heading/speed gains smaller
+  init_pos_gain: 0.0     # 0 = the untrained net is pure dead reckoning
+  out_init_scale: 0.01
+
+train:
+  lr: 0.001
+  grad_clip: 1.0
+  batch_size: 16
+  chunk_len: 50          # truncated BPTT window
+  epochs: 40
+  weight_decay: 0.0
+  loss_weights: [1.0, 1.0, 1.0, 1.0]   # plain MSE on the state
