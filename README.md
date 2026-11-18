@@ -107,3 +107,6 @@ MIT, see [LICENSE](LICENSE).
 
 ## Step 6 (confidence)
 `afkn/confidence/`: Layer 2 scores, history, probation and the confidence aggregator (`ConfidenceAggregator`, passed as `weighter=` to `run_federated`).
+
+## Step 7 (attacks)
+`afkn/attacks/`: random, sign-flip, scaling, bias and adaptive model-update attacks (`AttackPlan`, passed as `attack=` to `run_federated`).
