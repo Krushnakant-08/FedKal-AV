@@ -110,3 +110,6 @@ MIT, see [LICENSE](LICENSE).
 
 ## Step 7 (attacks)
 `afkn/attacks/`: random, sign-flip, scaling, bias and adaptive model-update attacks (`AttackPlan`, passed as `attack=` to `run_federated`).
+
+## Step 8 (evaluation)
+`afkn/eval/` + `afkn/scripts/make_all.py`: E1-E6 and E8 grids, runner, Wilcoxon statistics, fairness audit, tables and figures. `python -m afkn.scripts.make_all --scale smoke|small|full [--report-only]`. E7 (CARLA) is not implemented.
