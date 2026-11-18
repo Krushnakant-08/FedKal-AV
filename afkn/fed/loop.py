@@ -54,6 +54,7 @@ class RunLog:
     final_rmse: float = float("nan")
     per_client_final: list[float] = field(default_factory=list)  # local-only mode only
     params: np.ndarray | None = None  # final global parameters (fedavg / centralized)
+    client_params: list[np.ndarray] | None = None  # final per-client parameters (local-only)
 
     @property
     def total_bytes(self) -> int:
@@ -170,6 +171,7 @@ def run_local_only(dataset: FederatedDataset, kcfg: KalmanNetConfig, fed: FedSpe
             log.curve.append((r, float(np.mean(vals))))
             log.per_client_final = vals
     log.final_rmse = log.curve[-1][1]
+    log.client_params = [n.get_flat_params() for n in nets]
     return log
 
 
