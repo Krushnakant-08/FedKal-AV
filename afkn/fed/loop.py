@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from afkn.data.partition import FederatedDataset
+from afkn.attacks.plan import AttackPlan
 from afkn.fed.aggregate import RoundContext, Weighting, fedavg_weights, normalize_weights, sample_participants
 from afkn.fed.client import Client
 from afkn.fed.config import FedSpec
@@ -77,6 +78,7 @@ def run_federated(
     weighter: Weighter | None = None,
     init_params: np.ndarray | None = None,
     identities: Identities | None = None,
+    attack: AttackPlan | None = None,
 ) -> RunLog:
     """FedAvg (weights ``n_i``) unless a ``weighter`` is given. Step 6 plugs the confidence scores in here."""
     tree = SeedTree(seed)
@@ -97,6 +99,9 @@ def run_federated(
         for cid in ids:
             seed_c = tree.child("client", int(cid), "round", r).int_seed()
             upd = clients[int(cid)].local_update(bc, fed.local_epochs, seed_c)
+            is_attacker = attack is not None and attack.is_attacker(int(cid), r)
+            if attack is not None:
+                upd = attack.apply(upd, r)  # compromised vehicle alters its delta, then signs with its valid key
             if identities is not None:
                 upd = identities.sign(upd)
             raw_bytes = upd.to_bytes()
@@ -106,7 +111,7 @@ def run_federated(
             rows.append({
                 "client": int(cid), "accepted": reason is None, "reject_reason": reason,
                 "n_samples": upd.n_samples, "delta_norm": float(np.linalg.norm(upd.delta.astype(np.float64))),
-                "bytes_up": upd.payload_bytes, "signals": dict(upd.signals), "weight": 0.0,
+                "bytes_up": upd.payload_bytes, "signals": dict(upd.signals), "weight": 0.0, "attacker": is_attacker,
             })
             if reason is None:
                 accepted.append(upd)
