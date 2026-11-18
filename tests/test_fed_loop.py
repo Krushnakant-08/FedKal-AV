@@ -111,3 +111,23 @@ def test_confidence_aggregator_in_the_loop_logs_layer2_and_keeps_floor(dataset) 
         assert all(r["weight"] >= spec.weight_floor - 1e-12 for r in acc)
         assert all({"s_dir", "s_perf", "ema", "liar", "score", "probation"} <= set(r["layer2"]) for r in acc)
     assert np.isfinite(run.params).all()
+
+
+@pytest.mark.parametrize(
+    "attack, strength",
+    [("random", {"random_gain": 50.0}), ("sign_flip", {"flip_k": 5.0}), ("scaling", {"scale": 50.0}),
+     ("bias", {"bias_gain": 50.0}), ("adaptive", {"adaptive_beta": 1.0, "adaptive_scale": 50.0})],
+)
+def test_each_attack_measurably_hurts_equal_weight_fedavg(dataset, attack, strength) -> None:
+    """Done when (Step 7): with 3 of 10 compromised clients, equal-weight FedKalmanNet gets worse (or diverges)."""
+    from afkn.attacks import AttackPlan, AttackSpec
+    from afkn.seeding import SeedTree
+
+    f = FedSpec(rounds=4, local_epochs=1, participation=1.0, eval_every=4)
+    clean = run_federated(dataset, KCFG, f, seed=0).final_rmse
+    plan = AttackPlan(AttackSpec(attack=attack, fraction=0.3, **strength), len(dataset.clients), SeedTree(0))
+    run = run_federated(dataset, KCFG, f, seed=0, attack=plan)
+    assert len(plan.attacker_ids) == 3
+    assert any(r["attacker"] for r in run.rounds[0].clients)
+    hurt = (not np.isfinite(run.final_rmse)) or run.final_rmse > 1.05 * clean
+    assert hurt, f"{attack}: attacked {run.final_rmse:.3f} m vs clean {clean:.3f} m"
