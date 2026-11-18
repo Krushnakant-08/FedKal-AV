@@ -1,0 +1,12 @@
+# Attack settings (model-update attacks by compromised vehicles that still hold valid keys).
+# STARTING DEFAULTS to tune; none tuned against any result.
+attack: none           # none | random | sign_flip | scaling | bias | adaptive
+fraction: 0.3          # fraction of clients that are compromised (ignored when ids is set)
+ids: null              # explicit client ids, e.g. [1, 4, 7]
+start_round: 0         # attack begins at this round
+flip_k: 1.0            # sign_flip: delta = -flip_k * honest
+scale: 10.0            # scaling: delta = scale * honest
+random_gain: 1.0       # random: Gaussian noise with norm random_gain * ||honest||
+bias_gain: 1.0         # bias: honest + bias_gain * ||honest|| * u, u a fixed per-attacker unit direction
+adaptive_beta: 0.3     # adaptive: honest + beta * ||honest|| * u_perp, then rescaled to adaptive_scale * ||honest||
+adaptive_scale: 1.0    # adaptive: norm of the sent delta relative to ||honest|| (1.0 = stealthy)
