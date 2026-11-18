@@ -1,6 +1,7 @@
 # Layer 2 (confidence) settings. STARTING DEFAULTS to tune; none tuned against any result.
 clip_c: 2.0              # clip each delta norm to clip_c x the round's median norm
 perf_scale: 0.05         # s_perf = sigmoid(gain / perf_scale); gain = RMSE improvement on the trusted set [m]
+perf_source: server      # server | reported (reported = trust the client's own val-RMSE claim; E8 baseline)
 relative_gain: false     # true: gain / RMSE(global) instead of metres
 claim_reported_min: 0.05 # [m] reported val-RMSE improvement above this counts as "claims improvement"
 claim_measured_max: -0.05 # [m] server-measured gain below this counts as "measured degradation"
