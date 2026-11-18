@@ -113,21 +113,38 @@ def test_confidence_aggregator_in_the_loop_logs_layer2_and_keeps_floor(dataset) 
     assert np.isfinite(run.params).all()
 
 
+ATTACK_KCFG = load_kalmannet_config(
+    overrides={"net": {"init_pos_gain": 0.3}, "train": {"lr": 5e-3, "batch_size": 6, "chunk_len": 50}}
+)
+
+
 @pytest.mark.parametrize(
     "attack, strength",
-    [("random", {"random_gain": 50.0}), ("sign_flip", {"flip_k": 5.0}), ("scaling", {"scale": 50.0}),
-     ("bias", {"bias_gain": 50.0}), ("adaptive", {"adaptive_beta": 1.0, "adaptive_scale": 50.0})],
+    [("random", {"random_gain": 100.0}), ("sign_flip", {"flip_k": 20.0}), ("scaling", {"scale": 100.0}),
+     ("bias", {"bias_gain": 100.0}), ("adaptive", {"adaptive_beta": 1.0, "adaptive_scale": 100.0})],
 )
 def test_each_attack_measurably_hurts_equal_weight_fedavg(dataset, attack, strength) -> None:
-    """Done when (Step 7): with 3 of 10 compromised clients, equal-weight FedKalmanNet gets worse (or diverges)."""
+    """Done when (Step 7): with 3 of 10 compromised clients, equal-weight FedKalmanNet gets worse (or diverges).
+
+    Precondition checked first: clean federated training must improve on the untrained model, otherwise
+    'harm' is not meaningful (a first CI run showed an anti-training attack *improving* a barely trained model).
+    """
     from afkn.attacks import AttackPlan, AttackSpec
+    from afkn.fed.loop import _init_params
+    from afkn.models.kalmannet import KalmanNet
+    from afkn.models.train import evaluate
     from afkn.seeding import SeedTree
 
-    f = FedSpec(rounds=4, local_epochs=1, participation=1.0, eval_every=4)
-    clean = run_federated(dataset, KCFG, f, seed=0).final_rmse
+    f = FedSpec(rounds=8, local_epochs=2, participation=1.0, eval_every=8)
+    cfg = dataset.cfg
+    init = KalmanNet(ATTACK_KCFG, model=cfg.motion_model, dt=cfg.dt, seed=0)
+    init.set_flat_params(_init_params(dataset, ATTACK_KCFG, SeedTree(0)))
+    init_rmse = evaluate(init, dataset.global_test)["position_rmse"]
+    clean = run_federated(dataset, ATTACK_KCFG, f, seed=0).final_rmse
+    assert clean < init_rmse, f"clean federated training did not improve: {clean:.3f} m vs untrained {init_rmse:.3f} m"
     plan = AttackPlan(AttackSpec(attack=attack, fraction=0.3, **strength), len(dataset.clients), SeedTree(0))
-    run = run_federated(dataset, KCFG, f, seed=0, attack=plan)
+    run = run_federated(dataset, ATTACK_KCFG, f, seed=0, attack=plan)
     assert len(plan.attacker_ids) == 3
     assert any(r["attacker"] for r in run.rounds[0].clients)
     hurt = (not np.isfinite(run.final_rmse)) or run.final_rmse > 1.05 * clean
-    assert hurt, f"{attack}: attacked {run.final_rmse:.3f} m vs clean {clean:.3f} m"
+    assert hurt, f"{attack}: attacked {run.final_rmse:.3f} m vs clean {clean:.3f} m (untrained {init_rmse:.3f} m)"
