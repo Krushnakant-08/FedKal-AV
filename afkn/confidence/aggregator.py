@@ -61,20 +61,20 @@ class ConfidenceAggregator:
             ref = np.asarray(self.oracle.reference_delta(ctx.global_params, ctx.round), dtype=np.float64)
             s_dir = direction_scores(clipped, ref)
 
+        reported = np.array([
+            u.signals.get("val_rmse_before", np.nan) - u.signals.get("val_rmse_after", np.nan) for u in updates
+        ], dtype=np.float64)
         gain = np.full(k, np.nan)
         s_perf = np.ones(k)
-        if sp.use_perf or sp.use_claim:
+        if (sp.use_perf and sp.perf_source == "server") or sp.use_claim:
             base = float(self.oracle.rmse(ctx.global_params))
             cand = np.array([float(self.oracle.rmse((g + c).astype(np.float32))) for c in clipped])
             gain = base - cand
             if sp.relative_gain and np.isfinite(base) and base > 0:
                 gain = gain / base
         if sp.use_perf:
-            s_perf = perf_scores(gain, sp.perf_scale)
+            s_perf = perf_scores(reported if sp.perf_source == "reported" else gain, sp.perf_scale)
 
-        reported = np.array([
-            u.signals.get("val_rmse_before", np.nan) - u.signals.get("val_rmse_after", np.nan) for u in updates
-        ], dtype=np.float64)
         liar = np.zeros(k, dtype=bool)
         if sp.use_claim:
             liar = claim_flags(reported, gain, sp.claim_reported_min, sp.claim_measured_max)

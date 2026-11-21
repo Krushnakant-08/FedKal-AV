@@ -206,3 +206,20 @@ def test_honest_noisy_client_is_not_treated_like_an_attacker() -> None:
     noisy = HONEST + rng.normal(size=P).astype(np.float32) * np.linalg.norm(HONEST) / np.sqrt(P)
     wt, w = _run(_agg(), [_upd(0, HONEST), _upd(1, HONEST), _upd(2, noisy), _upd(3, -HONEST)])
     assert wt.info[2]["s_dir"] > 0.3 and w[2] > 5 * w[3]
+
+
+def test_reported_perf_source_trusts_the_claim_and_never_queries_the_oracle() -> None:
+    class NoOracle:
+        def reference_delta(self, *a):
+            raise AssertionError("oracle must not be used")
+
+        def rmse(self, *a):
+            raise AssertionError("oracle must not be used")
+
+    agg = ConfidenceAggregator(ConfidenceSpec(perf_source="reported", use_direction=False, use_claim=False, use_clip=False), NoOracle())
+    lie = {"val_rmse_before": 5.0, "val_rmse_after": 1.0}
+    truth = {"val_rmse_before": 5.0, "val_rmse_after": 6.0}
+    wt, _ = _run(agg, [_upd(0, HONEST, truth), _upd(1, -HONEST, lie)])
+    assert wt.info[1]["s_perf"] > 0.99 > wt.info[0]["s_perf"]  # the forged claim wins: that is the weakness E8 measures
+    with pytest.raises(ConfigError):
+        ConfidenceSpec(perf_source="oracle")

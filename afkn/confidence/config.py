@@ -17,6 +17,7 @@ class ConfidenceSpec:
     clip_c: float = 2.0
     perf_scale: float = 0.05
     relative_gain: bool = False
+    perf_source: str = "server"  # "server": measured on the trusted set; "reported": the client's own claim (E8 baseline)
     claim_reported_min: float = 0.05
     claim_measured_max: float = -0.05
     liar_factor: float = 0.5
@@ -36,6 +37,8 @@ class ConfidenceSpec:
     def __post_init__(self) -> None:
         if self.clip_c <= 0 or self.perf_scale <= 0:
             raise ConfigError("clip_c and perf_scale must be > 0")
+        if self.perf_source not in ("server", "reported"):
+            raise ConfigError("perf_source must be 'server' or 'reported'")
         if self.combine not in ("product", "mean"):
             raise ConfigError("combine must be 'product' or 'mean'")
         if not 0.0 < self.ema_alpha <= 1.0:

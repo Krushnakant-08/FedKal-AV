@@ -1,0 +1,68 @@
+# Experiment scales for E1-E8. Every number is a STARTING DEFAULT; nothing here was tuned against a result.
+# `smoke` only exercises the pipeline (CI). `small` is for a laptop sanity run. `full` follows the Build Plan sizes
+# (1000 steps, 200/40/40 trajectories, 100 rounds, >= 5 seeds) and is slow on CPU.
+scales:
+  smoke:
+    steps: 60
+    splits: {train: 4, val: 2, test: 2, global_test: 6, trusted: 6}
+    rounds: 2
+    local_epochs: 1
+    eval_every: 1
+    seeds: [0, 1]
+    kalmannet: {init_pos_gain: 0.3, lr: 0.005, batch_size: 4, chunk_len: 30}
+    noise_levels: [1.0]
+    hetero_levels: [strong]
+    faulty_fracs: [0.0, 0.3]
+    participations: [0.6, 1.0]
+    attack_fracs: [0.3]
+    attacks: [sign_flip]
+    ablation_variants: [default, no_direction]
+    ablation_attacks: [none, sign_flip]
+    ablation_attack_frac: 0.3
+  small:
+    steps: 300
+    splits: {train: 24, val: 6, test: 6, global_test: 30, trusted: 30}
+    rounds: 20
+    local_epochs: 2
+    eval_every: 2
+    seeds: [0, 1, 2, 3, 4]
+    kalmannet: {init_pos_gain: 0.3, lr: 0.005, batch_size: 8, chunk_len: 50}
+    noise_levels: [0.5, 1.0, 2.0]
+    hetero_levels: [homog, mild, strong]
+    faulty_fracs: [0.0, 0.1, 0.2, 0.3]
+    participations: [0.2, 0.6, 1.0]
+    attack_fracs: [0.1, 0.2, 0.3]
+    attacks: [random, sign_flip, scaling, bias, adaptive]
+    ablation_variants: [default, no_direction, no_perf, no_claim, no_clip, no_history, no_floor, combine_mean]
+    ablation_attacks: [none, sign_flip]
+    ablation_attack_frac: 0.2
+  full:
+    steps: 1000
+    splits: {train: 200, val: 40, test: 40, global_test: 200, trusted: 200}
+    rounds: 100
+    local_epochs: 2
+    eval_every: 5
+    seeds: [0, 1, 2, 3, 4]
+    kalmannet: {init_pos_gain: 0.3, lr: 0.001, batch_size: 16, chunk_len: 50}
+    noise_levels: [0.5, 1.0, 2.0]
+    hetero_levels: [homog, mild, strong]
+    faulty_fracs: [0.0, 0.1, 0.2, 0.3]
+    participations: [0.2, 0.6, 1.0]
+    attack_fracs: [0.1, 0.2, 0.3]
+    attacks: [random, sign_flip, scaling, bias, adaptive]
+    ablation_variants: [default, no_direction, no_perf, no_claim, no_clip, no_history, no_floor, combine_mean]
+    ablation_attacks: [none, sign_flip]
+    ablation_attack_frac: 0.2
+
+# Attack strengths used by E5/E8 (parameter-space attacks, relative to the honest update norm).
+attack_strengths:
+  random: {random_gain: 10.0}
+  sign_flip: {flip_k: 5.0}
+  scaling: {scale: 20.0}
+  bias: {bias_gain: 10.0}
+  adaptive: {adaptive_beta: 0.3, adaptive_scale: 1.0}
+
+fairness:
+  low_profiles: [low_grade]
+  reference_profiles: [high_grade, mid_grade]
+  min_relative_weight_ratio: 0.5   # audit flag: low-grade honest weight / reference weight below this is reported as a concern
