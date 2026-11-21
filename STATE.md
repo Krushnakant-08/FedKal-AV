@@ -12,10 +12,10 @@ Nothing has been run experimentally. All thresholds and noise levels are untuned
 | 2 | EKF and UKF baselines (+ simplified ESKF) | `afkn/filters` | **merged** (PR #3) |
 | 3 | KalmanNet-style GRU gain network | `afkn/models` | **merged** (PR #5; torch code written without a local torch, first run in CI) |
 | 4 | Client, server, FedAvg loop, byte-level messages | `afkn/fed` | **merged** (PR #6) |
-| 5 | Ed25519 signing and the identity checks | `afkn/security` | not started |
-| 6 | Layer 2 scores and confidence aggregator | `afkn/confidence` | not started |
-| 7 | Attacks | `afkn/attacks` | not started |
-| 8 | Experiments E1-E8, statistics, fairness audit | `afkn/eval` | not started |
+| 5 | Ed25519 signing and the identity checks | `afkn/security` | **merged** (PR #8) |
+| 6 | Layer 2 scores and confidence aggregator | `afkn/confidence` | **merged** (PR #9) |
+| 7 | Attacks | `afkn/attacks` | **merged** (PR #10) |
+| 8 | Experiments E1-E8, statistics, fairness audit | `afkn/eval` | **merged** (PR #11); E7 (CARLA) not implemented |
 
 Correction: an earlier version of this file marked Step 1 "Completed" under a `simulation/` package
 and a different step table. That code never existed on `main`; Step 1 was built from scratch in PR #1.
@@ -59,6 +59,28 @@ Results on the Step 2 test data (matched Q/R, no IMU bias/RW/scale, 200 x 400): 
 - `afkn/fed/{client,server,loop}.py`: `Client.local_update`, `Server.broadcast/basic_checks/final_weights/aggregate` (`basic_checks` is the hook Step 5 replaces), `run_federated(..., weighter=)` (hook for Step 6), `run_local_only`, `run_centralized`, `run_comparison`.
 - Config: `configs/fed.yaml` (`FedSpec`).
 
+## Step 5: security (`afkn/security`)
+
+- `signing.py`: Ed25519 via `cryptography` (`generate_private_key(tree=None)`, `sign_update`, `verify_signature`); keys are runtime-only, seed-derived in simulation.
+- `registry.py`: `KeyRegistry` (enroll once, revoke). `verifier.py`: `IdentityVerifier.begin_round(bc)/check(update) -> CheckResult` with 9 reject reasons. `identities.py`: `Identities(n, tree)` simulation fleet.
+- `Server.check_update` uses the verifier when set; `run_federated(identities=)` signs every update.
+
+## Step 6: confidence (`afkn/confidence`)
+
+- `scores.py` (clip, direction, performance, claim flags, combine), `aggregator.py` (`ConfidenceAggregator`, passed as `weighter=`; EMA, probation, `n_i x c_i`), `oracle.py` (protocol) and `oracle_torch.py` (`TorchOracle`), `config.py`, `configs/confidence.yaml` (ablation flags `use_*`, `perf_source`).
+- `afkn/fed/aggregate.py`: `RoundContext`, `Weighting`; the loop logs `layer2` per client row.
+- Deviation: probation clients get exactly the weight floor (not 0), because the project rules say the floor is always enforced.
+
+## Step 7: attacks (`afkn/attacks`)
+
+- `AttackSpec`, `AttackPlan(spec, n_clients, tree)` (`attacker_ids`, `is_attacker`, `apply`), `attack_delta`; attacks: random, sign_flip, scaling, bias, adaptive. `run_federated(attack=)`; rows carry `attacker`.
+- The adaptive attacker keeps a normal weight under Layer 2 at the defaults (documented by a test; E8 measures it).
+
+## Step 8: eval (`afkn/eval`, `afkn/scripts/make_all.py`)
+
+- `config.py` + `configs/experiments.yaml` (scales smoke/small/full), `cells.py` (grid E1-E6, E8; cells deduplicated), `runner.py` (torch; one JSON record per cell, resumable), `metrics.py`, `stats.py` (paired Wilcoxon + rank-biserial), `fairness.py`, `report.py` (CSV/Markdown tables, PNG figures, `summary.md`).
+- Run: `python -m afkn.scripts.make_all --scale smoke|small|full [--report-only]`. Outputs under `runs/` and `results/` (git-ignored).
+
 ## Findings that constrain later steps
 
 - CI exposed that an unbounded KalmanNet gain can destabilise the filter recursion (local-only RMSE ~3e6 m, centralized NaN); fixed with a tanh bound. Federated-vs-local results are still unmeasured beyond the CI test.
@@ -70,9 +92,16 @@ Results on the Step 2 test data (matched Q/R, no IMU bias/RW/scale, 200 x 400): 
 
 ## Open issues / notes for later steps
 
-- `requirements.txt` is not pinned (project rule asks for pinned); pin once versions are verified on Python 3.11 (needs torch, see below).
+- `requirements.txt` is pinned to the versions of a green CI run (Python 3.11, torch 2.15.0).
 - Process noise Q is additive on the state and excludes IMU error; filters model IMU white noise via `Qu` only.
 - `faulty` clients are honest-but-faulty sensors, not attackers; the trusted/global-test `faulty` slice uses the profile default fault mode (`constant_bias`).
 - Full default dataset is about 0.35 GB of float64 in memory.
 - Tests run locally on Python 3.13; CI runs 3.11 and passed on `main` after Steps 1 and 2.
 - PyTorch is not installed in the build sandbox and package installs are disabled there, so any torch code cannot be run locally; it can only be run by CI or after the network/package-install setting is enabled (a new chat picks it up).
+
+## Open items (nothing below has been run)
+
+- **No experiment has been run.** `smoke` only exercises the pipeline in CI. Run `--scale small`, then `--scale full`, on a machine with PyTorch; all thresholds, attack strengths and the Layer 2 combiner (product) are untuned starting defaults.
+- E7 (CARLA transfer) is not implemented. E5's softmax-temperature ablation does not apply (no softmax).
+- Known limitation: the adaptive attacker is not reliably caught by Layer 2 at the defaults. Hijacked vehicles with valid keys pass Layer 1 by design; no formal security or DP guarantee is claimed.
+- CI-found issue (fixed): an unbounded KalmanNet gain destabilised the filter loop; the gain is now tanh-bounded.
